@@ -12,7 +12,6 @@ except ImportError as e:
     from unittest import mock
     GPIO = mock.Mock()
 
-
 app = Flask(__name__)
 
 # Directories for saving data and images
@@ -65,80 +64,24 @@ def rotate_stepper_then_servo(stepper_degrees, servo_index, servo_angle, directi
     time.sleep(0.5)  # Ensure stepper finishes before servo starts
     rotate_servo(servo_index, servo_angle)      # Rotate servo
 
-def capture_image(test_name):
+# Function to capture image and get RGB values from clicked pixel
+def capture_image(test_name, x=None, y=None):
     ret, frame = cam_1.read()
     if ret:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         image_path = os.path.join(IMAGE_DIR, f"{test_name}_{timestamp}.jpg")
         cv2.imwrite(image_path, frame)
-        return image_path
-    return None
 
-def save_test_data(test_name, data):
-    json_path = os.path.join(DATA_DIR, f"{test_name}.json")
-    with open(json_path, "w") as f:
-        json.dump(data, f)
+        # If a pixel was clicked, get its RGB value
+        if x is not None and y is not None:
+            (b, g, r) = frame[y, x]  # OpenCV uses BGR format
+            rgb_values = (r, g, b)  # Convert to RGB format
+            print(f"RGB at ({x}, {y}): {rgb_values}")
+        else:
+            rgb_values = None  # No pixel clicked yet
 
-# Routes for each test
-@app.route('/ph')
-def ph_test():
-    rotate_stepper_then_servo(0, 0, 95)  # Stepper movement then servo rotation
-    image_path = capture_image("ph_test")
-    data = {
-        'test_name': 'pH',
-        'timestamp': datetime.now().isoformat(),
-        'image_path': image_path
-    }
-    save_test_data("ph_test", data)
-    return render_template('video.html', test_name='pH Test', data=data)
-
-@app.route('/texture')
-def texture_test():
-    rotate_stepper_then_servo(72, 1, 95)
-    image_path = capture_image("texture_test")
-    data = {
-        'test_name': 'Texture',
-        'timestamp': datetime.now().isoformat(),
-        'image_path': image_path
-    }
-    save_test_data("texture_test", data)
-    return render_template('video.html', test_name='Texture Test', data=data)
-
-@app.route('/catalase')
-def catalase_test():
-    rotate_stepper_then_servo(144, 2, 95)
-    image_path = capture_image("catalase_test")
-    data = {
-        'test_name': 'Catalase',
-        'timestamp': datetime.now().isoformat(),
-        'image_path': image_path
-    }
-    save_test_data("catalase_test", data)
-    return render_template('video.html', test_name='Catalase Test', data=data)
-
-@app.route('/carbonate')
-def carbonate_test():
-    rotate_stepper_then_servo(216, 3, 95)
-    image_path = capture_image("carbonate_test")
-    data = {
-        'test_name': 'Carbonate',
-        'timestamp': datetime.now().isoformat(),
-        'image_path': image_path
-    }
-    save_test_data("carbonate_test", data)
-    return render_template('video.html', test_name='Carbonate Test', data=data)
-
-@app.route('/spectroscopy')
-def spectroscopy_test():
-    rotate_stepper_then_servo(288, 4, 95)
-    image_path = capture_image("spectroscopy_test")
-    data = {
-        'test_name': 'LED Spectroscopy',
-        'timestamp': datetime.now().isoformat(),
-        'image_path': image_path
-    }
-    save_test_data("spectroscopy_test", data)
-    return render_template('video.html', test_name='Spectroscopy Test', data=data)
+        return image_path, rgb_values
+    return None, None
 
 # Route for live camera feed (Camera 2)
 def gen():
@@ -156,6 +99,78 @@ def gen():
 def video_feed():
     return Response(gen(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+# Save test data
+def save_test_data(test_name, data):
+    json_path = os.path.join(DATA_DIR, f"{test_name}.json")
+    with open(json_path, "w") as f:
+        json.dump(data, f)
+
+# Routes for each test
+@app.route('/ph')
+def ph_test():
+    rotate_stepper_then_servo(0, 0, 95)  # Stepper movement then servo rotation
+    image_path, rgb_values = capture_image("ph_test")
+    data = {
+        'test_name': 'pH',
+        'timestamp': datetime.now().isoformat(),
+        'image_path': image_path,
+        'rgb_values': rgb_values
+    }
+    save_test_data("ph_test", data)
+    return render_template('video.html', test_name='pH Test', data=data)
+
+@app.route('/texture')
+def texture_test():
+    rotate_stepper_then_servo(72, 1, 95)
+    image_path, rgb_values = capture_image("texture_test")
+    data = {
+        'test_name': 'Texture',
+        'timestamp': datetime.now().isoformat(),
+        'image_path': image_path,
+        'rgb_values': rgb_values
+    }
+    save_test_data("texture_test", data)
+    return render_template('video.html', test_name='Texture Test', data=data)
+
+@app.route('/catalase')
+def catalase_test():
+    rotate_stepper_then_servo(144, 2, 95)
+    image_path, rgb_values = capture_image("catalase_test")
+    data = {
+        'test_name': 'Catalase',
+        'timestamp': datetime.now().isoformat(),
+        'image_path': image_path,
+        'rgb_values': rgb_values
+    }
+    save_test_data("catalase_test", data)
+    return render_template('video.html', test_name='Catalase Test', data=data)
+
+@app.route('/carbonate')
+def carbonate_test():
+    rotate_stepper_then_servo(216, 3, 95)
+    image_path, rgb_values = capture_image("carbonate_test")
+    data = {
+        'test_name': 'Carbonate',
+        'timestamp': datetime.now().isoformat(),
+        'image_path': image_path,
+        'rgb_values': rgb_values
+    }
+    save_test_data("carbonate_test", data)
+    return render_template('video.html', test_name='Carbonate Test', data=data)
+
+@app.route('/spectroscopy')
+def spectroscopy_test():
+    rotate_stepper_then_servo(288, 4, 95)
+    image_path, rgb_values = capture_image("spectroscopy_test")
+    data = {
+        'test_name': 'LED Spectroscopy',
+        'timestamp': datetime.now().isoformat(),
+        'image_path': image_path,
+        'rgb_values': rgb_values
+    }
+    save_test_data("spectroscopy_test", data)
+    return render_template('video.html', test_name='Spectroscopy Test', data=data)
+
 # HTML templates for rendering
 @app.route('/')
 def index():
@@ -169,11 +184,6 @@ def database():
 def experiment():
     return render_template('experiment.html')
 
-@app.route('/video')
-def video():
-    return render_template('video.html')
-
-    
 @app.route('/results')
 def results():
     # Load test results from JSON files for display
@@ -190,4 +200,3 @@ if __name__ == '__main__':
         app.run(debug=True)
     finally:
         GPIO.cleanup()  # Ensure GPIO pins are released after the app stops
-
