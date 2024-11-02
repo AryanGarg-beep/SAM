@@ -7,7 +7,7 @@
     <style>
         /* Styling the container */
         .container {
-            display: flex;
+            display: block;
             justify-content: center;
             align-items: center;
             gap: 20px;
@@ -20,6 +20,7 @@
             border: 2px solid #333;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
             text-align: center;
+            margin-left: 33%;
         }
 
         h1 {
@@ -36,7 +37,7 @@
             text-align: center;
             background-color: rgb(84, 14, 165);
             border-radius: 10px;
-            margin-left: 43%;
+            margin-left: 48%;
         }
         button {
             display: block;
@@ -61,13 +62,6 @@
             <h3>Camera Feed 1</h3>
             <img src="{{ url_for('video_feed1') }}" alt="Camera 1 Feed">
         </div>
-
-        <!-- Second camera feed -->
-        <div class="video-box">
-            <h3>Camera Feed 2</h3>
-            <img src="{{ url_for('video_feed2') }}" alt="Camera 2 Feed">
-        </div>
-    </div>
 
     <button onclick="captureImage()">Capture Image from Camera 1</button>
 
