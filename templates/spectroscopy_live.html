@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spectroscopy Live Feed</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>Spectroscopy Live Feed</h1>
+    <canvas id="spectrumChart" width="800" height="400"></canvas>
+
+    <script>
+        const ctx = document.getElementById('spectrumChart').getContext('2d');
+        const spectrumChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], // Wavelengths
+                datasets: [{
+                    label: 'Intensity',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    data: [] // Intensities
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: {
+                        type: 'linear',
+                        title: { display: true, text: 'Wavelength (nm)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Intensity' }
+                    }
+                }
+            }
+        });
+
+        function updateChart(wavelengths, intensities) {
+            spectrumChart.data.labels = wavelengths;
+            spectrumChart.data.datasets[0].data = intensities;
+            spectrumChart.update();
+        }
+
+        const eventSource = new EventSource('/spectroscopy_feed');
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            updateChart(data.wavelengths, data.intensities);
+        };
+    </script>
+</body>
+</html>

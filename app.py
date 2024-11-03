@@ -3,14 +3,19 @@ import cv2
 from flask import Flask, jsonify, render_template, Response
 from datetime import datetime
 import os
+import numpy as np
 import time
+
 
 try:
     import RPi.GPIO as GPIO
+    import Adafruit_DHT
 except ImportError as e:
     print(f"ImportError: {e}. This may indicate that the RPi.GPIO module is not installed or is being run on a non-Raspberry Pi system.")
-    from unittest import mock
+    import mock
+    from mock import Mock
     GPIO = mock.Mock()
+    Adafruit_DHT=mock.Mock()
 
 app = Flask(__name__)
 
@@ -27,13 +32,17 @@ cam_2 = cv2.VideoCapture(1)  # Camera 2 for live feed
 
 # GPIO Setup
 GPIO.setmode(GPIO.BCM)
+GAS_SENSOR_PIN = 3  # GPIO pin connected to MQ4 sensor's data output
+DHT_SENSOR = Adafruit_DHT.DHT11
+DHT_PIN = 4  # GPIO pin connected to DHT11 data pin
 STEPPER_DIR_PIN = 2
 STEPPER_STEP_PIN = 5
-SERVO_PINS = [17, 27, 22, 10, 9]  # Define pins for each servo
+SERVO_PINS = [22, 26, 23, 24]  # Define pins for each servo
 
 # Initialize stepper motor pins
 GPIO.setup(STEPPER_DIR_PIN, GPIO.OUT)
 GPIO.setup(STEPPER_STEP_PIN, GPIO.OUT)
+GPIO.setup(GAS_SENSOR_PIN, GPIO.IN)
 
 # Initialize servo motors
 servo_pwms = []
@@ -56,7 +65,7 @@ def rotate_stepper(degrees, direction):
 def rotate_servo(servo_index, angle):
     duty_cycle = 2 + (angle / 18)  # Calculate duty cycle for angle
     servo_pwms[servo_index].ChangeDutyCycle(duty_cycle)
-    time.sleep(0.5)  # Hold for rotation
+    time.sleep(1)  # Hold for rotation
     servo_pwms[servo_index].ChangeDutyCycle(0)
 
 def rotate_stepper_then_servo(stepper_degrees, servo_index, servo_angle, direction="CW"):
@@ -64,24 +73,97 @@ def rotate_stepper_then_servo(stepper_degrees, servo_index, servo_angle, directi
     time.sleep(0.5)  # Ensure stepper finishes before servo starts
     rotate_servo(servo_index, servo_angle)      # Rotate servo
 
-# Function to capture image and get RGB values from clicked pixel
-def capture_image(test_name, x=None, y=None):
+def capture_image(test_name):
     ret, frame = cam_1.read()
     if ret:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         image_path = os.path.join(IMAGE_DIR, f"{test_name}_{timestamp}.jpg")
         cv2.imwrite(image_path, frame)
+        return image_path
+    return None
 
-        # If a pixel was clicked, get its RGB value
-        if x is not None and y is not None:
-            (b, g, r) = frame[y, x]  # OpenCV uses BGR format
-            rgb_values = (r, g, b)  # Convert to RGB format
-            print(f"RGB at ({x}, {y}): {rgb_values}")
-        else:
-            rgb_values = None  # No pixel clicked yet
+def save_test_data(test_name, data):
+    json_path = os.path.join(DATA_DIR, f"{test_name}.json")
+    with open(json_path, "w") as f:
+        json.dump(data, f)
 
-        return image_path, rgb_values
-    return None, None
+def analyze_spectrum(frame):
+    # Define region of interest for spectrum analysis
+    roi = frame[100:400, 200:600]  # Adjust coordinates based on your setup
+    hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    
+    # Calculate the hue histogram in the region of interest
+    hue_hist = cv2.calcHist([hsv_roi], [0], None, [180], [0, 180])
+    hue_hist = hue_hist / hue_hist.max()  # Normalize intensities
+    return hue_hist
+
+def hue_to_wavelength(hue):
+    min_wavelength = 380
+    max_wavelength = 750
+    wavelength = min_wavelength + (hue / 180) * (max_wavelength - min_wavelength)
+    return wavelength
+
+
+# Routes for each test
+@app.route('/ph')
+def ph_test():
+    rotate_stepper_then_servo(0, 0, 95)  # Stepper movement then servo rotation
+    image_path = capture_image("ph_test")
+    data = {
+        'test_name': 'pH',
+        'timestamp': datetime.now().isoformat(),
+        'image_path': image_path
+    }
+    save_test_data("ph_test", data)
+    return render_template('video.html', test_name='pH Test', data=data)
+
+@app.route('/texture')
+def texture_test():
+    rotate_stepper_then_servo(72, 1, 95)
+    image_path = capture_image("texture_test")
+    data = {
+        'test_name': 'Texture',
+        'timestamp': datetime.now().isoformat(),
+        'image_path': image_path
+    }
+    save_test_data("texture_test", data)
+    return render_template('video.html', test_name='Texture Test', data=data)
+
+@app.route('/catalase')
+def catalase_test():
+    rotate_stepper_then_servo(144, 2, 95)
+    image_path = capture_image("catalase_test")
+    data = {
+        'test_name': 'Catalase',
+        'timestamp': datetime.now().isoformat(),
+        'image_path': image_path
+    }
+    save_test_data("catalase_test", data)
+    return render_template('video.html', test_name='Catalase Test', data=data)
+
+@app.route('/carbonate')
+def carbonate_test():
+    rotate_stepper_then_servo(216, 3, 95)
+    image_path = capture_image("carbonate_test")
+    data = {
+        'test_name': 'Carbonate',
+        'timestamp': datetime.now().isoformat(),
+        'image_path': image_path
+    }
+    save_test_data("carbonate_test", data)
+    return render_template('video.html', test_name='Carbonate Test', data=data)
+
+@app.route('/spectroscopy')
+def spectroscopy_test():
+    rotate_stepper_then_servo(288, 3, 95)
+    image_path = capture_image("spectroscopy_test")
+    data = {
+        'test_name': 'LED Spectroscopy',
+        'timestamp': datetime.now().isoformat(),
+        'image_path': image_path
+    }
+    save_test_data("spectroscopy_test", data)
+    return render_template('video.html', test_name='Spectroscopy Test', data=data)
 
 # Route for live camera feed (Camera 2)
 def gen():
@@ -99,78 +181,6 @@ def gen():
 def video_feed():
     return Response(gen(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-# Save test data
-def save_test_data(test_name, data):
-    json_path = os.path.join(DATA_DIR, f"{test_name}.json")
-    with open(json_path, "w") as f:
-        json.dump(data, f)
-
-# Routes for each test
-@app.route('/ph')
-def ph_test():
-    rotate_stepper_then_servo(0, 0, 95)  # Stepper movement then servo rotation
-    image_path, rgb_values = capture_image("ph_test")
-    data = {
-        'test_name': 'pH',
-        'timestamp': datetime.now().isoformat(),
-        'image_path': image_path,
-        'rgb_values': rgb_values
-    }
-    save_test_data("ph_test", data)
-    return render_template('video.html', test_name='pH Test', data=data)
-
-@app.route('/texture')
-def texture_test():
-    rotate_stepper_then_servo(72, 1, 95)
-    image_path, rgb_values = capture_image("texture_test")
-    data = {
-        'test_name': 'Texture',
-        'timestamp': datetime.now().isoformat(),
-        'image_path': image_path,
-        'rgb_values': rgb_values
-    }
-    save_test_data("texture_test", data)
-    return render_template('video.html', test_name='Texture Test', data=data)
-
-@app.route('/catalase')
-def catalase_test():
-    rotate_stepper_then_servo(144, 2, 95)
-    image_path, rgb_values = capture_image("catalase_test")
-    data = {
-        'test_name': 'Catalase',
-        'timestamp': datetime.now().isoformat(),
-        'image_path': image_path,
-        'rgb_values': rgb_values
-    }
-    save_test_data("catalase_test", data)
-    return render_template('video.html', test_name='Catalase Test', data=data)
-
-@app.route('/carbonate')
-def carbonate_test():
-    rotate_stepper_then_servo(216, 3, 95)
-    image_path, rgb_values = capture_image("carbonate_test")
-    data = {
-        'test_name': 'Carbonate',
-        'timestamp': datetime.now().isoformat(),
-        'image_path': image_path,
-        'rgb_values': rgb_values
-    }
-    save_test_data("carbonate_test", data)
-    return render_template('video.html', test_name='Carbonate Test', data=data)
-
-@app.route('/spectroscopy')
-def spectroscopy_test():
-    rotate_stepper_then_servo(288, 4, 95)
-    image_path, rgb_values = capture_image("spectroscopy_test")
-    data = {
-        'test_name': 'LED Spectroscopy',
-        'timestamp': datetime.now().isoformat(),
-        'image_path': image_path,
-        'rgb_values': rgb_values
-    }
-    save_test_data("spectroscopy_test", data)
-    return render_template('video.html', test_name='Spectroscopy Test', data=data)
-
 # HTML templates for rendering
 @app.route('/')
 def index():
@@ -184,6 +194,97 @@ def database():
 def experiment():
     return render_template('experiment.html')
 
+@app.route('/video')
+def video():
+    return render_template('video.html')
+
+
+@app.route('/humidity')
+def humidity():
+    return render_template('humidity.html')
+
+@app.route('/sensor-data')
+def sensor_data():
+    # Read DHT11 sensor data
+    humidity, temperature = Adafruit_DHT.read(DHT_SENSOR, DHT_PIN)
+    # Read gas sensor digital threshold
+    gas_detected = GPIO.input(GAS_SENSOR_PIN)
+
+    if humidity is not None and temperature is not None:
+        data = {
+            'temperature': temperature,
+            'humidity': humidity,
+            'gas': "Detected" if gas_detected else "Not Detected"
+        }
+    else:
+        data = {'error': 'Failed to read from DHT11 sensor'}
+
+    return jsonify(data)
+
+# Serve gas sensor page and read sensor data
+@app.route('/gas')
+def gas_test():
+    return render_template('gas.html')
+
+@app.route('/collect_soil')
+def collect_soil():
+    return render_template('collect_soil.html')
+
+@app.route('/rgb-detection')
+def rgb_detection():
+    # Capture an image from the external camera
+    ret, img = cam_1.read()
+    if not ret:
+        return jsonify({'error': 'Failed to capture image'}), 500
+
+    # Save the captured image
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    image_path = os.path.join(IMAGE_DIR, f"rgb_detection_{timestamp}.jpg")
+    cv2.imwrite(image_path, img)
+
+    return render_template('rgb_detection.html', image_path=image_path)
+
+# New route to handle clicks and return RGB values at the clicked point
+@app.route('/get_rgb', methods=['POST'])
+def get_rgb():
+    x = int(request.form['x'])
+    y = int(request.form['y'])
+
+    # Read the last captured image for RGB detection
+    img_path = request.form['image_path']
+    img = cv2.imread(img_path)
+
+    # Get BGR and convert to RGB
+    b, g, r = img[y, x]
+    rgb = (r, g, b)
+    return jsonify({'x': x, 'y': y, 'rgb': rgb})
+
+@app.route('/spectroscopy_feed')
+def spectroscopy_feed():
+    def generate():
+        while True:
+            ret, frame = cam_2.read()
+            if not ret:
+                continue
+
+            hue_hist = analyze_spectrum(frame)
+            wavelengths = [hue_to_wavelength(hue) for hue in range(180)]
+            spectrum_data = {
+                'wavelengths': wavelengths,
+                'intensities': hue_hist.flatten().tolist()
+            }
+
+            yield f"data:{json.dumps(spectrum_data)}\n\n"
+            time.sleep(0.1)  # Adjust delay as needed for smoother updates
+
+    return Response(generate(), mimetype='text/event-stream')
+
+@app.route('/spectroscopy_live')
+def spectroscopy_live():
+    return render_template('spectroscopy_live.html')
+
+
+    
 @app.route('/results')
 def results():
     # Load test results from JSON files for display
